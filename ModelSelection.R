@@ -1,4 +1,4 @@
-## ----setup, include=FALSE, cache = FALSE--------------------------------------------
+## ----setup, include=FALSE, cache = FALSE-------------------------------
 library(MASS);
 library(tidyverse); library(broom); library(knitr); library(glue);
 library(modelr);
@@ -27,7 +27,7 @@ fig.x = 16 * figure_scaler;
 fig.y = 9 * figure_scaler;
 
 
-## ---- include = T, echo = T, cache = T, fig.width = fig.x, fig.height = fig.y-------
+## ---- include = T, echo = T, cache = T, fig.width = fig.x, fig.height = fig.y----
 library(tidyverse); library(broom);
 set.seed(1);
 n_sim <- 2e3;
@@ -466,7 +466,9 @@ observed_aics <-
 
 all_results <- 
   full_join(most_common_models, observed_aics) %>%
-  mutate(obs_aic = obs_aic - obs_aic[which(aic_selected_obs)], 
+  mutate(n_aic = replace_na(n_aic, 0), 
+         n_aicc = replace_na(n_aicc, 0), 
+         obs_aic = obs_aic - obs_aic[which(aic_selected_obs)], 
          obs_aicc = obs_aicc - obs_aicc[which(aicc_selected_obs)])
 
 competing_models <-
@@ -495,6 +497,24 @@ all_results  %>%
   kable();
 
 
+## ----bootstrap4, include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
+competing_models %>%
+  mutate(selected = str_replace_all(selected, "_worst","")) %>%
+  select(selected, n_aic, obs_aic, n_aicc, obs_aicc) %>%
+  arrange(obs_aic) %>%
+  mutate(obs_aic = formatC(obs_aic, format = "f", digits = 2),
+         obs_aicc = formatC(obs_aicc, format = "f", digits = 2))  %>%
+  mutate(n_aic = paste0(formatC(100 * n_aic / n_boot, format = "f", digits = 1),"%"), 
+         n_aicc = paste0(formatC(100 * n_aicc / n_boot, format = "f", digits = 1),"%")) %>%
+  rename(`Variable set` = selected, 
+         `Pct. Sel. AIC` = n_aic, 
+         `Delta(Obs. AIC)` = obs_aic,
+         `Pct. Sel. AICc` = n_aicc,
+         `Delta(Obs. AICc)` = obs_aicc) %>%
+  kable();
+
+
+
 ## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
 
 bind_rows(
@@ -505,7 +525,7 @@ bind_rows(
     glm(family = "binomial",
         data = breast_dx) %>%
     tidy() %>%
-    mutate(Mechanism = "Most common"),
+    mutate(Mechanism = "Most common (bootstrap)"),
   # Selected by forward selection on original data
   competing_models %>% 
     filter(aic_selected_obs) %>%
@@ -521,15 +541,23 @@ bind_rows(
     glm(family = "binomial",
         data = breast_dx) %>%
     tidy() %>%
-    mutate(Mechanism = "Best AIC")) %>% 
+    mutate(Mechanism = "Smallest AIC (bootstrap)")) %>% 
   arrange(term, Mechanism) %>%
   filter(term != "(Intercept)") %>%
-  mutate(`logOR` = formatC(estimate, format = "f", digits = 2), 
-         SE = formatC(std.error, format = "f", digits = 2), 
-         `logOR/SE` = formatC(statistic, format = "f", digits = 2), 
-         .keep = "unused") %>%
+  left_join(
+    apply(breast_dx[-1],2,sd) %>% 
+      as.data.frame() %>% 
+      rownames_to_column(var = "term") %>%
+      as_tibble() %>%
+      rename(stdev = ".")) %>%
+  mutate(std_estimate = paste0("(",formatC(estimate*stdev, format = "f", digits = 1),")"),
+         estimate = formatC(estimate, format = "f", digits = 2)) %>%
+  unite("pretty_value", c(estimate,std_estimate), sep ="") %>%
+  pivot_wider(id_cols = term,
+              names_from = Mechanism,
+              values_from = pretty_value, 
+              values_fill = "") %>%
   rename(` ` = term) %>%
-  select(-p.value) %>%
-  kable()
+  kable(align = c("lrrr"))
 
 
