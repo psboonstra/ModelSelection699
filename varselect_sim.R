@@ -126,4 +126,31 @@ selected_model_summaries <-
            colSums()) 
 
 x_labels <- 
-  setdiff(levels(full_model_coefs$term), "x.1")
+  #setdiff(levels(full_model_coefs$term), "x.1")
+  levels(full_model_coefs$term)
+
+# forward selection using AIC ----
+
+# selected models
+aic_model_fits <- 
+  wide_dat %>%
+  nest_by(sim_id) %>%
+  mutate(model = list(stepAICc(object = lm(formula = y ~ 1, data = data), 
+                               scope = list(upper = full_model_fmla),
+                               direction = "forward", 
+                               trace = FALSE))) 
+
+#Store coefficient estimates
+aic_model_coefs <- 
+  aic_model_fits %>%
+  summarize(broom::tidy(model), 
+            .groups = "drop") %>%
+  #Remove rows for intercept term
+  filter(term != "(Intercept)") %>%
+  mutate(term = factor(term, levels = paste0("x.", 1:p), ordered = T))
+
+#Store model summaries
+aic_model_summaries <- 
+  aic_model_fits %>%
+  summarize(broom::glance(model), 
+            .groups = "drop")

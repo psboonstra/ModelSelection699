@@ -1,12 +1,24 @@
-extractAICc <- 
+extractAICc.glm <- 
   function (fit, scale = 0, k = 2, ...) {
     n <- length(fit$residuals)
     edf <- n - fit$df.residual
     aic <- fit$aic
     c(edf, aic - (2 * edf) + 
         + k * edf * (n / pmax(.Machine$double.eps, n - edf - 1)))
-        
+    
   }
+
+extractAICc.lm <- 
+  function (fit, scale = 0, k = 2, ...) {
+    n <- length(fit$residuals)
+    edf <- n - fit$df.residual
+    RSS <- deviance(fit)
+    dev <- if (scale > 0) 
+      RSS/scale - n
+    else n * log(RSS/n)
+    c(edf, dev + k * edf * (n / pmax(.Machine$double.eps, n - edf - 1)))
+  }
+
 
 stepAICc <- 
   function (object, scope, scale = 0, direction = c("both", "backward", 
@@ -93,7 +105,13 @@ stepAICc <-
     n <- nobs(object, use.fallback = TRUE)
     fit <- object
     # Change to AICc
-    bAIC <- extractAICc(fit, scale, k = k, ...)
+    if("glm" %in% class(fit)) {
+      bAIC <- extractAICc.glm(fit, scale, k = k, ...)
+    } else if ("lm" %in% class(fit)) {
+      bAIC <- extractAICc.lm(fit, scale, k = k, ...)
+    } else {
+      stop("AICc only implemented for 'glm' and 'lm'")
+    }
     edf <- bAIC[1L]
     bAIC <- bAIC[2L]
     if (is.na(bAIC)) 
@@ -177,7 +195,13 @@ stepAICc <-
         stop("number of rows in use has changed: remove missing values?")
       Terms <- terms(fit)
       # Change to AICc
-      bAIC <- extractAICc(fit, scale, k = k, ...)
+      if("glm" %in% class(fit)) {
+        bAIC <- extractAICc.glm(fit, scale, k = k, ...)
+      } else if ("lm" %in% class(fit)) {
+        bAIC <- extractAICc.lm(fit, scale, k = k, ...)
+      } else {
+        stop("AICc only implemented for 'glm' and 'lm'")
+      }
       edf <- bAIC[1L]
       bAIC <- bAIC[2L]
       if (trace) {

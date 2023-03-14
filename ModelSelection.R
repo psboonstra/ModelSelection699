@@ -1,4 +1,4 @@
-## ----setup, include=FALSE, cache = FALSE-------------------------------
+## ----setup, include=FALSE, cache = FALSE--------------------------
 library(MASS);
 library(tidyverse); library(broom); library(knitr); library(glue);
 library(modelr);
@@ -27,7 +27,7 @@ fig.x = 16 * figure_scaler;
 fig.y = 9 * figure_scaler;
 
 
-## ---- include = T, echo = T, cache = T, fig.width = fig.x, fig.height = fig.y----
+## ---- include = T, echo = T, cache = T, fig.width = fig.x, fig.height = fig.y, message = F----
 library(tidyverse); library(broom);
 set.seed(1);
 n_sim <- 2e3;
@@ -43,14 +43,13 @@ beta <- c(1, numeric(p_null));
 true_rsq <- 0.2;
 #remove all estimates with univariable p-value exceeding 
 p.value_threshold <- 0.10;
+source("stepAICc.R"); # discussed later
 source("varselect_sim.R");
-
 
 
 ## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
 full_model_coefs %>% 
-  filter(term != "x.1") %>%
-  ggplot(mapping = aes(x = term, y = statistic)) + 
+  ggplot(mapping = aes(x = term, y = estimate)) + 
   geom_boxplot(outlier.shape = NA) + 
   geom_point(position = position_jitter(width = 0.2), 
              size = 1/3, 
@@ -58,44 +57,30 @@ full_model_coefs %>%
              color = "red") + 
   geom_hline(yintercept = 0) + 
   scale_x_discrete(name = "X", limits = x_labels, labels = NULL) +
-  scale_y_continuous(name = "", limits = c(-4, 4)) +
+  scale_y_continuous(name = "") +
+  coord_cartesian(ylim = c(-0.75, 1.75)) + 
   theme(text = element_text(size = text_scaler * 26),
         axis.text.y = element_text(size = text_scaler * 20));
 
 
 ## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
 selected_model_coefs %>%
-  filter(term != "x.1",
-         !is.na(statistic)) %>%
-  ggplot(mapping = aes(x = term, y = statistic)) + 
+  filter(!is.na(statistic)) %>%
+  ggplot(mapping = aes(x = term, y = estimate)) + 
   geom_boxplot(outlier.shape = NA) + 
   geom_point(position = position_jitter(width = 0.2), 
              size = 1/3, 
-             alpha = 0.20,
+             alpha = 0.05,
              color = "red") + 
   geom_hline(yintercept = 0) + 
+  geom_label(data = selected_model_coefs %>% filter(!is.na(statistic)) %>% count(term), 
+             aes(x = term, label = n), 
+             y = 1.75) + 
   scale_x_discrete(name = "X", limits = x_labels, labels = NULL) +
-  scale_y_continuous(name = "", limits = c(-4, 4)) +
+  scale_y_continuous(name = "") +
+  coord_cartesian(ylim = c(-0.75, 1.75)) + 
   theme(text = element_text(size = text_scaler * 26),
         axis.text.y = element_text(size = text_scaler * 20));
-
-
-## ---- include = T, echo = T, cache = !recache, fig.width = fig.x, fig.height = fig.y----
-full_model_coefs %>% 
-  filter(term != "x.1") %>%
-  group_by(sim_id) %>%
-  summarize(num_fd = sum(p.value < 0.05)) %>%
-  summarize(mean_num_fd = mean(num_fd), 
-            median_num_fd = median(num_fd));
-
-
-## ---- include = T, echo = T, cache = !recache, fig.width = fig.x, fig.height = fig.y----
-selected_model_coefs %>% 
-  filter(term != "x.1") %>%
-  group_by(sim_id) %>%
-  summarize(num_fd = sum(p.value < 0.05)) %>%
-  summarize(mean_num_fd = mean(num_fd), 
-            median_num_fd = median(num_fd));
 
 
 ## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
@@ -302,9 +287,13 @@ full_join(full_model_summaries %>%
         legend.position = "top");
 
 
+## ----echo=FALSE, out.width='30%'----------------------------------
+knitr::include_graphics('anna.png')
+
+
 ## ---- include = T, echo = T, cache = !recache, fig.width = fig.x, fig.height = fig.y----
 breast_dx <-
-  read_csv("bdiag.csv") %>%
+  read_csv("bdiag.csv", show_col_types = FALSE) %>%
   # Translate M/D into 1/0
   mutate(malignant = 1 * (diagnosis == "M")) %>% 
   # Drop errant space in 'concave points_mean' variable name 
@@ -358,9 +347,6 @@ forward_aic_counts <-
   group_by_all() %>% 
   count(name = "n_aic")
 
-
-source("stepAICc.R");
-
 forward_aicc <- 
   breast_dx_bootstrap %>%
   map(.x = .$strap, 
@@ -388,32 +374,32 @@ forward_aicc_counts <-
 
 
 
-## ----bootstrap2, include = T, echo = F, cache = !recache, fig.width = 1.2 * fig.x, fig.height = 2 * fig.y----
+## ----bootstrap2, include = T, echo = F, cache = !recache, fig.width = 0.8 * fig.x, fig.height = 0.8 * fig.y----
 
 bind_rows(
-  forward_aic %>% mutate(criterion = "AIC"),
+  #forward_aic %>% mutate(criterion = "AIC"),
   forward_aicc %>% mutate(criterion = "AICc")) %>%
   mutate(term = factor(term) %>% fct_infreq()) %>% 
   ggplot() + 
   geom_bar(aes(x = term,
-               fill = criterion),
+               #fill = criterion
+               ),
            position = "dodge") +
   scale_x_discrete(name = NULL) +
-  scale_fill_manual(breaks = c("AIC", "AICc"),
-                    values = c("#d8b365", "#01665e")) + 
+  #scale_fill_manual(breaks = c("AIC", "AICc"),
+  #                  values = c("#d8b365", "#01665e")) + 
   scale_y_reverse(name = "Percent selected", 
                   breaks = seq(0, n_boot, length = 6), 
                   labels = paste0(100 * seq(0, n_boot, length = 6) / n_boot,"%"), 
                   expand = expansion(0.02)) +
   coord_flip() + 
-  theme(text = element_text(size = text_scaler * 26),
+  theme(text = element_text(size = text_scaler * 19),
         legend.position = "top",
-        axis.text.y = element_text(size = text_scaler * 18))
+        axis.text.y = element_text(size = text_scaler * 13))
 
 
 
 ## ----bootstrap3, include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
-
 # Actual selected models
 aic_selected <- 
   stepAIC(glm(malignant ~ 1, 
@@ -459,7 +445,7 @@ observed_aics <-
   nest_by(model) %>%
   mutate(fit = list(glm(formula = model, data = breast_dx, family = "binomial"))) %>%
   mutate(obs_aic = extractAIC(fit)[[2]],
-         obs_aicc = extractAICc(fit)[[2]]) %>%
+         obs_aicc = extractAICc.glm(fit)[[2]]) %>%
   ungroup() %>%
   select(-fit, -data);
 
@@ -476,22 +462,23 @@ competing_models <-
   filter(n_aic == max(n_aic) | aic_selected_obs | obs_aic == min(obs_aic))
 
 all_results  %>%
-  filter(obs_aic < 2 | obs_aicc < 2) %>%
+  filter(obs_aic < 0.5 | obs_aicc < 0.5) %>%
   mutate(selected = str_replace_all(selected, "_worst","")) %>%
-  select(selected, n_aic, obs_aic, n_aicc, obs_aicc) %>%
-  arrange(obs_aic) %>%
-  mutate(obs_aic = formatC(obs_aic, format = "f", digits = 2),
+  select(selected, #n_aic, obs_aic, 
+         n_aicc, obs_aicc) %>%
+  arrange(obs_aicc) %>%
+  mutate(#obs_aic = formatC(obs_aic, format = "f", digits = 2),
          obs_aicc = formatC(obs_aicc, format = "f", digits = 2)) %>%
   add_row(selected = "Subtotal", 
-          n_aic = sum(.$n_aic), 
-          obs_aic = "",
+          #n_aic = sum(.$n_aic), 
+          #obs_aic = "",
           n_aicc = sum(.$n_aicc), 
           obs_aicc = "") %>%
-  mutate(n_aic = paste0(formatC(100 * n_aic / n_boot, format = "f", digits = 1),"%"), 
+  mutate(#n_aic = paste0(formatC(100 * n_aic / n_boot, format = "f", digits = 1),"%"), 
          n_aicc = paste0(formatC(100 * n_aicc / n_boot, format = "f", digits = 1),"%")) %>%
   rename(`Variable set` = selected, 
-         `Pct. Sel. AIC` = n_aic, 
-         `Delta(Obs. AIC)` = obs_aic,
+         #`Pct. Sel. AIC` = n_aic, 
+         #`Delta(Obs. AIC)` = obs_aic,
          `Pct. Sel. AICc` = n_aicc,
          `Delta(Obs. AICc)` = obs_aicc) %>%
   kable();
@@ -500,19 +487,19 @@ all_results  %>%
 ## ----bootstrap4, include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
 competing_models %>%
   mutate(selected = str_replace_all(selected, "_worst","")) %>%
-  select(selected, n_aic, obs_aic, n_aicc, obs_aicc) %>%
-  arrange(obs_aic) %>%
-  mutate(obs_aic = formatC(obs_aic, format = "f", digits = 2),
+  select(selected, #n_aic, obs_aic, 
+         n_aicc, obs_aicc) %>%
+  arrange(obs_aicc) %>%
+  mutate(#obs_aic = formatC(obs_aic, format = "f", digits = 2),
          obs_aicc = formatC(obs_aicc, format = "f", digits = 2))  %>%
-  mutate(n_aic = paste0(formatC(100 * n_aic / n_boot, format = "f", digits = 1),"%"), 
+  mutate(#n_aic = paste0(formatC(100 * n_aic / n_boot, format = "f", digits = 1),"%"), 
          n_aicc = paste0(formatC(100 * n_aicc / n_boot, format = "f", digits = 1),"%")) %>%
   rename(`Variable set` = selected, 
-         `Pct. Sel. AIC` = n_aic, 
-         `Delta(Obs. AIC)` = obs_aic,
+         #`Pct. Sel. AIC` = n_aic, 
+         #`Delta(Obs. AIC)` = obs_aic,
          `Pct. Sel. AICc` = n_aicc,
          `Delta(Obs. AICc)` = obs_aicc) %>%
   kable();
-
 
 
 ## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
@@ -520,7 +507,7 @@ competing_models %>%
 bind_rows(
   # Most commonly selected by bootstrap
   competing_models %>% 
-    filter(n_aic == max(n_aic)) %>%
+    filter(n_aicc == max(n_aicc)) %>%
     pull(model) %>%
     glm(family = "binomial",
         data = breast_dx) %>%
@@ -528,7 +515,7 @@ bind_rows(
     mutate(Mechanism = "Most common (bootstrap)"),
   # Selected by forward selection on original data
   competing_models %>% 
-    filter(aic_selected_obs) %>%
+    filter(aicc_selected_obs) %>%
     pull(model) %>%
     glm(family = "binomial",
         data = breast_dx) %>%
@@ -536,12 +523,12 @@ bind_rows(
     mutate(Mechanism = "Forward selected"),
   # Selected by forward selection on original data
   competing_models %>% 
-    filter(obs_aic == min(obs_aic)) %>%
+    filter(obs_aicc == min(obs_aicc)) %>%
     pull(model) %>%
     glm(family = "binomial",
         data = breast_dx) %>%
     tidy() %>%
-    mutate(Mechanism = "Smallest AIC (bootstrap)")) %>% 
+    mutate(Mechanism = "Smallest AICc (bootstrap)")) %>% 
   arrange(term, Mechanism) %>%
   filter(term != "(Intercept)") %>%
   left_join(
@@ -560,4 +547,35 @@ bind_rows(
   rename(` ` = term) %>%
   kable(align = c("lrrr"))
 
+
+
+## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
+aic_model_coefs %>%
+  ggplot(mapping = aes(x = term, y = estimate)) + 
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(position = position_jitter(width = 0.2), 
+             size = 1/3, 
+             alpha = 0.05,
+             color = "red") + 
+  geom_hline(yintercept = 0) + 
+  geom_label(data = aic_model_coefs %>% filter(!is.na(statistic)) %>% count(term), 
+             aes(x = term, label = n), 
+             y = 1.75) + 
+  scale_x_discrete(name = "X", limits = x_labels, labels = NULL) +
+  scale_y_continuous(name = "") +
+  coord_cartesian(ylim = c(-0.75, 1.75)) + 
+  theme(text = element_text(size = text_scaler * 26),
+        axis.text.y = element_text(size = text_scaler * 20));
+
+
+## ---- include = T, echo = F, cache = !recache, fig.width = fig.x, fig.height = fig.y----
+aic_model_summaries %>%
+  ggplot() + 
+  geom_histogram(aes(x = r.squared), bins = 30) +
+  geom_vline(xintercept = true_rsq, size = 1.5) + 
+  scale_x_continuous(name = expression(R^2),
+                     limits = c(0, 1), 
+                     expand = c(0,0)) + 
+  scale_y_continuous(name = "", labels = NULL) +
+  theme(text = element_text(size = text_scaler * 26));
 
